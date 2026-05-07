@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APEX TIMER — Race Precision Stopwatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0D0D0D;
+    --surface: #141414;
+    --surface2: #1a1a1a;
+    --green: #39FF14;
+    --green-dim: rgba(57,255,20,0.15);
+    --orange: #FF6B00;
+    --red: #FF2244;
+    --gold: #FFD700;
+    --white: #e8e8e8;
+    --dim: #444;
+    --dimmer: #222;
+    --text-dim: #555;
+    --font-display: 'Orbitron', monospace;
+    --font-ui: 'Rajdhani', sans-serif;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--white);
+    font-family: var(--font-ui);
+    overflow-x: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 20px 12px 40px;
+    background:
+      radial-gradient(ellipse at center, #1a1a1a 0%, #0D0D0D 70%),
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255,255,255,0.012) 2px,
+        rgba(255,255,255,0.012) 4px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 2px,
+        rgba(255,255,255,0.012) 2px,
+        rgba(255,255,255,0.012) 4px
+      );
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 480px;
+    margin-bottom: 20px;
+    padding: 0 4px;
+  }
+  .header-logo {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 4px;
+    color: var(--green);
+    text-shadow: 0 0 10px var(--green);
+  }
+  .header-logo span { color: var(--text-dim); }
+  .sound-btn {
+    background: var(--surface2);
+    border: 1px solid #2a2a2a;
+    color: var(--text-dim);
+    font-size: 16px;
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sound-btn:hover { border-color: var(--green); color: var(--green); }
+  .sound-btn.active { color: var(--green); border-color: var(--green); box-shadow: 0 0 8px var(--green-dim); }
+
+  /* ===== MAIN CARD ===== */
+  .timer-card {
+    width: 100%;
+    max-width: 480px;
+    background:
+      linear-gradient(145deg, #1c1c1c 0%, #111 100%);
+    border-radius: 16px;
+    border: 1px solid #2a2a2a;
+    padding: 28px 24px 24px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .timer-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(57,255,20,0.3), transparent 40%, transparent 60%, rgba(57,255,20,0.1));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+  .timer-card.running::before { opacity: 1; animation: borderPulse 2s ease-in-out infinite; }
+  @keyframes borderPulse {
+    0%,100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  /* Carbon fiber inset */
+  .timer-display-panel {
+    background:
+      repeating-linear-gradient(
+        45deg,
+        rgba(0,0,0,0.15) 0px,
+        rgba(0,0,0,0.15) 1px,
+        transparent 1px,
+        transparent 4px
+      ),
+      repeating-linear-gradient(
+        -45deg,
+        rgba(0,0,0,0.1) 0px,
+        rgba(0,0,0,0.1) 1px,
+        transparent 1px,
+        transparent 4px
+      ),
+      #0a0a0a;
+    border-radius: 10px;
+    border: 1px solid #1e1e1e;
+    padding: 20px 16px 16px;
+    position: relative;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
+  }
+
+  /* ===== TIMER DISPLAY ===== */
+  .timer-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    font-family: var(--font-display);
+    position: relative;
+  }
+  .digit-group { display: flex; align-items: center; gap: 2px; }
+  .digit-block {
+    position: relative;
+    width: 36px;
+    text-align: center;
+  }
+  .digit-block.sm { width: 28px; }
+  .digit-ghost {
+    position: absolute;
+    inset: 0;
+    font-size: 42px;
+    font-weight: 700;
+    color: rgba(57,255,20,0.06);
+    line-height: 1;
+    user-select: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .digit-ghost.sm { font-size: 32px; }
+  .digit-val {
+    position: relative;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--green);
+    text-shadow: 0 0 12px rgba(57,255,20,0.6), 0 0 30px rgba(57,255,20,0.2);
+    line-height: 1;
+    z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .digit-val.sm { font-size: 32px; }
+  .seg-sep {
+    font-family: var(--font-display);
+    font-size: 38px;
+    font-weight: 700;
+    color: rgba(57,255,20,0.4);
+    line-height: 1;
+    padding: 0 2px;
+    margin-bottom: 4px;
+    align-self: center;
+  }
+  .seg-sep.dot {
+    font-size: 30px;
+    padding: 0 1px;
+    margin-bottom: 2px;
+  }
+
+  .ms-group { display: flex; align-items: center; gap: 2px; margin-left: 2px; }
+
+  .timer-display.paused .digit-val { animation: breatheGlow 2.5s ease-in-out infinite; }
+  .timer-display.gold-flash .digit-val { animation: goldFlash 0.6s ease-out; }
+  @keyframes breatheGlow {
+    0%,100% { text-shadow: 0 0 8px rgba(57,255,20,0.3); opacity: 0.75; }
+    50% { text-shadow: 0 0 20px rgba(57,255,20,0.8), 0 0 40px rgba(57,255,20,0.3); opacity: 1; }
+  }
+  @keyframes goldFlash {
+    0% { color: var(--gold); text-shadow: 0 0 20px rgba(255,215,0,0.9), 0 0 40px rgba(255,215,0,0.5); }
+    100% { color: var(--green); text-shadow: 0 0 12px rgba(57,255,20,0.6); }
+  }
+
+  .timer-label-row {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    margin-top: 6px;
+    font-family: var(--font-ui);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .timer-label { text-align: center; }
+  .timer-label.w36 { width: 36px; }
+  .timer-label.w28 { width: 28px; }
+  .timer-label.sep { width: 20px; }
+  .timer-label.dotsep { width: 12px; }
+
+  /* Running indicator */
+  .run-indicator {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-ui);
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .run-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background 0.3s;
+  }
+  .running .run-dot { background: var(--green); animation: blink 1s step-end infinite; box-shadow: 0 0 6px var(--green); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ===== STATS BAR ===== */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    max-width: 480px;
+    margin-bottom: 14px;
+  }
+  .stat-pill {
+    background: var(--surface);
+    border: 1px solid #222;
+    border-radius: 8px;
+    padding: 8px 6px;
+    text-align: center;
+    transition: border-color 0.3s;
+  }
+  .stat-pill:hover { border-color: #333; }
+  .stat-icon { font-size: 12px; margin-bottom: 2px; }
+  .stat-label {
+    font-family: var(--font-ui);
+    font-size: 8px;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 3px;
+  }
+  .stat-val {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--white);
+    letter-spacing: 0.5px;
+  }
+  .stat-val.best { color: var(--green); }
+  .stat-val.worst { color: var(--red); }
+
+  /* ===== CONTROLS ===== */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1.6fr 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: 480px;
+    margin-bottom: 16px;
+  }
+  .btn {
+    min-height: 56px;
+    border: none;
+    border-radius: 12px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.1s, box-shadow 0.2s, opacity 0.3s;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active { transform: scale(0.94); }
+  .btn-ripple {
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    transform: scale(0);
+    opacity: 0.5;
+    animation: rippleAnim 0.5s ease-out forwards;
+    pointer-events: none;
+  }
+  @keyframes rippleAnim {
+    to { transform: scale(20); opacity: 0; }
+  }
+
+  /* Start/Pause */
+  .btn-start {
+    background: linear-gradient(145deg, #4fff25, #2acc0a);
+    color: #0a1f04;
+    box-shadow: 0 4px 20px rgba(57,255,20,0.35), 0 0 0 1px rgba(57,255,20,0.2) inset;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .btn-start:hover { box-shadow: 0 6px 28px rgba(57,255,20,0.5), 0 0 0 1px rgba(57,255,20,0.3) inset; }
+  .btn-start .btn-ripple { background: rgba(57,255,20,0.6); }
+
+  .btn-start.pausing {
+    background: linear-gradient(145deg, #ff9000, #cc5500);
+    color: #1f0a00;
+    box-shadow: 0 4px 20px rgba(255,107,0,0.4), 0 0 0 1px rgba(255,107,0,0.2) inset;
+  }
+
+  /* Lap */
+  .btn-lap {
+    background: linear-gradient(145deg, #ff8c1a, #cc5500);
+    color: #1f0a00;
+    box-shadow: 0 4px 16px rgba(255,107,0,0.3);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    opacity: 0.35;
+    pointer-events: none;
+    transition: opacity 0.3s, box-shadow 0.2s, transform 0.1s;
+  }
+  .btn-lap.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .btn-lap.active:hover { box-shadow: 0 6px 24px rgba(255,107,0,0.5); }
+  .btn-lap .btn-ripple { background: rgba(255,107,0,0.6); }
+
+  /* Reset */
+  .btn-reset {
+    background: linear-gradient(145deg, #ff3355, #aa0022);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(255,34,68,0.25);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    opacity: 0.25;
+    pointer-events: none;
+    transition: opacity 0.3s, box-shadow 0.2s, transform 0.1s;
+  }
+  .btn-reset.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+  .btn-reset.active:hover { box-shadow: 0 6px 24px rgba(255,34,68,0.45); }
+  .btn-reset .btn-ripple { background: rgba(255,34,68,0.6); }
+
+  /* ===== LAP PANEL ===== */
+  .lap-panel {
+    width: 100%;
+    max-width: 480px;
+  }
+  .lap-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 0 2px;
+  }
+  .lap-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .lap-count-badge {
+    background: var(--green-dim);
+    border: 1px solid rgba(57,255,20,0.25);
+    color: var(--green);
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+  .avg-lap {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    font-weight: 600;
+  }
+  .avg-lap span { color: var(--white); font-family: var(--font-display); font-size: 10px; }
+  .export-btn {
+    background: transparent;
+    border: 1px solid #2a2a2a;
+    color: var(--text-dim);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .export-btn:hover { border-color: var(--orange); color: var(--orange); }
+
+  .lap-list {
+    max-height: 280px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a2a transparent;
+  }
+  .lap-list::-webkit-scrollbar { width: 3px; }
+  .lap-list::-webkit-scrollbar-track { background: transparent; }
+  .lap-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+  .lap-row {
+    display: grid;
+    grid-template-columns: 60px 1fr 1fr;
+    align-items: center;
+    padding: 9px 12px 9px 14px;
+    border-radius: 8px;
+    border-left: 3px solid var(--dim);
+    background: var(--surface);
+    animation: slideInTop 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    transition: background 0.2s;
+  }
+  .lap-row:nth-child(even) { background: var(--surface2); }
+  .lap-row.best { border-left-color: var(--green); }
+  .lap-row.worst { border-left-color: var(--red); }
+  .lap-row.best .lap-num { color: var(--green); }
+  .lap-row.worst .lap-num { color: var(--red); }
+
+  @keyframes slideInTop {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .lap-num {
+    font-family: var(--font-display);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+  }
+  .lap-split {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--white);
+    text-align: center;
+  }
+  .lap-total {
+    font-family: var(--font-display);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: right;
+  }
+
+  .lap-list-empty {
+    text-align: center;
+    padding: 28px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  /* ===== TOAST ===== */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--surface2);
+    border: 1px solid #2a2a2a;
+    color: var(--white);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    animation: toastIn 0.3s ease-out forwards;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    white-space: nowrap;
+  }
+  .toast.green { border-color: rgba(57,255,20,0.3); color: var(--green); }
+  .toast.orange { border-color: rgba(255,107,0,0.3); color: var(--orange); }
+  .toast.red { border-color: rgba(255,34,68,0.3); color: var(--red); }
+  .toast.fade-out { animation: toastOut 0.3s ease-in forwards; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(20px); } }
+
+  /* ===== KEYBOARD LEGEND ===== */
+  .kb-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    justify-content: center;
+    margin-top: 20px;
+    max-width: 480px;
+    width: 100%;
+    opacity: 0.35;
+  }
+  .kb-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-ui);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .kb-key {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: var(--font-display);
+    font-size: 9px;
+    color: var(--dim);
+  }
+
+  @media (max-width: 400px) {
+    .digit-val { font-size: 34px; }
+    .digit-ghost { font-size: 34px; }
+    .digit-block { width: 30px; }
+    .seg-sep { font-size: 30px; }
+    .digit-val.sm { font-size: 26px; }
+    .digit-ghost.sm { font-size: 26px; }
+    .digit-block.sm { width: 22px; }
+    .stats-bar { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="header">
+  <div class="header-logo">APEX <span>/ TIMER</span></div>
+  <button class="sound-btn active" id="soundBtn" title="Toggle Sound">🔊</button>
+</div>
+
+<!-- TIMER CARD -->
+<div class="timer-card" id="timerCard">
+  <div class="timer-display-panel">
+    <div class="run-indicator">
+      <div class="run-dot" id="runDot"></div>
+      <span id="runLabel">STANDBY</span>
+    </div>
+    <div class="timer-display paused" id="timerDisplay">
+      <div class="timer-row">
+        <!-- HH -->
+        <div class="digit-group">
+          <div class="digit-block"><div class="digit-ghost">8</div><div class="digit-val" id="dH1">0</div></div>
+          <div class="digit-block"><div class="digit-ghost">8</div><div class="digit-val" id="dH2">0</div></div>
+        </div>
+        <div class="seg-sep">:</div>
+        <!-- MM -->
+        <div class="digit-group">
+          <div class="digit-block"><div class="digit-ghost">8</div><div class="digit-val" id="dM1">0</div></div>
+          <div class="digit-block"><div class="digit-ghost">8</div><div class="digit-val" id="dM2">0</div></div>
+        </div>
+        <div class="seg-sep">:</div>
+        <!-- SS -->
+        <div class="digit-group">
+          <div class="digit-block"><div class="digit-ghost">8</div><div class="digit-val" id="dS1">0</div></div>
+          <div class="digit-block"><div class="digit-ghost">8</div><div class="digit-val" id="dS2">0</div></div>
+        </div>
+        <div class="seg-sep dot">.</div>
+        <!-- MS -->
+        <div class="ms-group">
+          <div class="digit-block sm"><div class="digit-ghost sm">8</div><div class="digit-val sm" id="dms1">0</div></div>
+          <div class="digit-block sm"><div class="digit-ghost sm">8</div><div class="digit-val sm" id="dms2">0</div></div>
+        </div>
+      </div>
+      <div class="timer-label-row">
+        <div class="timer-label w36">H</div><div class="timer-label w36">H</div>
+        <div class="timer-label sep"></div>
+        <div class="timer-label w36">M</div><div class="timer-label w36">M</div>
+        <div class="timer-label sep"></div>
+        <div class="timer-label w36">S</div><div class="timer-label w36">S</div>
+        <div class="timer-label dotsep"></div>
+        <div class="timer-label w28">m</div><div class="timer-label w28">s</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stat-pill">
+    <div class="stat-icon">⚡</div>
+    <span class="stat-label">BEST LAP</span>
+    <div class="stat-val best" id="statBest">—</div>
+  </div>
+  <div class="stat-pill">
+    <div class="stat-icon">💀</div>
+    <span class="stat-label">WORST LAP</span>
+    <div class="stat-val worst" id="statWorst">—</div>
+  </div>
+  <div class="stat-pill">
+    <div class="stat-icon">📊</div>
+    <span class="stat-label">AVERAGE</span>
+    <div class="stat-val" id="statAvg">—</div>
+  </div>
+  <div class="stat-pill">
+    <div class="stat-icon">🏁</div>
+    <span class="stat-label">TOTAL LAPS</span>
+    <div class="stat-val" id="statTotal">0</div>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <button class="btn btn-lap" id="btnLap">LAP</button>
+  <button class="btn btn-start" id="btnStart">START</button>
+  <button class="btn btn-reset" id="btnReset">RESET</button>
+</div>
+
+<!-- LAP PANEL -->
+<div class="lap-panel">
+  <div class="lap-panel-header">
+    <div class="lap-meta">
+      <div class="lap-count-badge" id="lapBadge">0 LAPS</div>
+      <div class="avg-lap">AVG <span id="avgDisplay">—</span></div>
+    </div>
+    <button class="export-btn" onclick="exportLaps()">⬇ EXPORT</button>
+  </div>
+  <div class="lap-list" id="lapList">
+    <div class="lap-list-empty" id="emptyMsg">NO LAPS RECORDED</div>
+  </div>
+</div>
+
+<!-- KEYBOARD LEGEND -->
+<div class="kb-legend">
+  <div class="kb-item"><kbd class="kb-key">SPC</kbd> Start / Pause</div>
+  <div class="kb-item"><kbd class="kb-key">L</kbd> Lap</div>
+  <div class="kb-item"><kbd class="kb-key">R</kbd> Reset</div>
+  <div class="kb-item"><kbd class="kb-key">E</kbd> Export</div>
+</div>
+
+<script>
+// ===== STATE =====
+let running = false;
+let startTime = 0;
+let elapsed = 0;
+let lapStart = 0;
+let laps = [];
+let rafId = null;
+let soundEnabled = true;
+let audioCtx = null;
+
+// ===== DOM =====
+const timerCard = document.getElementById('timerCard');
+const timerDisplay = document.getElementById('timerDisplay');
+const runDot = document.getElementById('runDot');
+const runLabel = document.getElementById('runLabel');
+const btnStart = document.getElementById('btnStart');
+const btnLap = document.getElementById('btnLap');
+const btnReset = document.getElementById('btnReset');
+const lapList = document.getElementById('lapList');
+const emptyMsg = document.getElementById('emptyMsg');
+const lapBadge = document.getElementById('lapBadge');
+const avgDisplay = document.getElementById('avgDisplay');
+const statBest = document.getElementById('statBest');
+const statWorst = document.getElementById('statWorst');
+const statAvg = document.getElementById('statAvg');
+const statTotal = document.getElementById('statTotal');
+const soundBtn = document.getElementById('soundBtn');
+
+// digit elements
+const D = {
+  H1: document.getElementById('dH1'), H2: document.getElementById('dH2'),
+  M1: document.getElementById('dM1'), M2: document.getElementById('dM2'),
+  S1: document.getElementById('dS1'), S2: document.getElementById('dS2'),
+  ms1: document.getElementById('dms1'), ms2: document.getElementById('dms2'),
+};
+
+// ===== AUDIO =====
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function playBeep(freq = 880, dur = 0.06, type = 'square') {
+  if (!soundEnabled) return;
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e){}
+}
+function playLapBeep() { playBeep(1200, 0.05, 'square'); }
+function playStopBeep() { playBeep(600, 0.1, 'sawtooth'); }
+function playStartBeep() { playBeep(1000, 0.05, 'sine'); }
+
+// ===== TIME FORMATTING =====
+function formatTime(ms, forDisplay = false) {
+  const totalMs = Math.floor(ms);
+  const centis = Math.floor((totalMs % 1000) / 10);
+  const secs = Math.floor(totalMs / 1000) % 60;
+  const mins = Math.floor(totalMs / 60000) % 60;
+  const hrs = Math.floor(totalMs / 3600000);
+  if (forDisplay) return { hrs, mins, secs, centis };
+  const pad2 = n => String(n).padStart(2,'0');
+  if (hrs > 0) return `${pad2(hrs)}:${pad2(mins)}:${pad2(secs)}.${pad2(centis)}`;
+  return `${pad2(mins)}:${pad2(secs)}.${pad2(centis)}`;
+}
+
+function updateDisplay(ms) {
+  const { hrs, mins, secs, centis } = formatTime(ms, true);
+  const h = String(hrs).padStart(2,'0');
+  const m = String(mins).padStart(2,'0');
+  const s = String(secs).padStart(2,'0');
+  const c = String(centis).padStart(2,'0');
+  D.H1.textContent = h[0]; D.H2.textContent = h[1];
+  D.M1.textContent = m[0]; D.M2.textContent = m[1];
+  D.S1.textContent = s[0]; D.S2.textContent = s[1];
+  D.ms1.textContent = c[0]; D.ms2.textContent = c[1];
+}
+
+// ===== RAF LOOP =====
+function tick() {
+  if (!running) return;
+  elapsed = performance.now() - startTime;
+  updateDisplay(elapsed);
+  rafId = requestAnimationFrame(tick);
+}
+
+// ===== CONTROLS =====
+function doStart() {
+  running = true;
+  startTime = performance.now() - elapsed;
+  lapStart = lapStart === 0 ? startTime : (performance.now() - (elapsed - lapStart > 0 ? elapsed - (elapsed - lapStart) : 0));
+  // fix lapStart
+  if (laps.length === 0 && lapStart === 0) lapStart = startTime;
+
+  timerCard.classList.add('running');
+  timerDisplay.classList.remove('paused');
+  runLabel.textContent = 'RUNNING';
+  runDot.style.animation = '';
+
+  btnStart.textContent = 'PAUSE';
+  btnStart.classList.add('pausing');
+  btnLap.classList.add('active');
+  btnReset.classList.remove('active');
+
+  playStartBeep();
+  rafId = requestAnimationFrame(tick);
+  saveSession();
+}
+
+function doPause() {
+  running = false;
+  cancelAnimationFrame(rafId);
+  elapsed = performance.now() - startTime;
+  updateDisplay(elapsed);
+
+  timerCard.classList.remove('running');
+  timerDisplay.classList.add('paused');
+  runLabel.textContent = 'PAUSED';
+
+  btnStart.textContent = 'START';
+  btnStart.classList.remove('pausing');
+  btnLap.classList.remove('active');
+  btnReset.classList.add('active');
+
+  playStopBeep();
+  saveSession();
+}
+
+function doLap() {
+  if (!running) return;
+  const now = performance.now();
+  const total = now - startTime;
+  const lapTime = total - (laps.length > 0 ? laps.reduce((a,l)=>a+l.split,0) : 0);
+
+  laps.unshift({ split: lapTime, total: total, num: laps.length + 1 });
+  // re-number: laps stored newest first
+  const sortedByTime = [...laps].sort((a,b) => a.split - b.split);
+  const bestSplit = sortedByTime[0].split;
+  const worstSplit = sortedByTime[sortedByTime.length - 1].split;
+
+  renderLaps(bestSplit, worstSplit);
+  updateStats(bestSplit, worstSplit);
+  playLapBeep();
+
+  // gold flash if best lap
+  if (laps.length > 1 && lapTime === bestSplit) {
+    flashGold();
+  }
+  toast('Lap recorded', 'green');
+  saveSession();
+}
+
+function doReset() {
+  if (running) return;
+  running = false;
+  elapsed = 0;
+  lapStart = 0;
+  laps = [];
+  updateDisplay(0);
+
+  timerCard.classList.remove('running');
+  timerDisplay.classList.add('paused');
+  runLabel.textContent = 'STANDBY';
+
+  btnStart.textContent = 'START';
+  btnStart.classList.remove('pausing');
+  btnLap.classList.remove('active');
+  btnReset.classList.remove('active');
+
+  lapList.innerHTML = '';
+  emptyMsg.style.display = '';
+  lapList.appendChild(emptyMsg);
+  lapBadge.textContent = '0 LAPS';
+  avgDisplay.textContent = '—';
+  statBest.textContent = '—';
+  statWorst.textContent = '—';
+  statAvg.textContent = '—';
+  statTotal.textContent = '0';
+
+  localStorage.removeItem('apexSession');
+  toast('Reset complete', 'red');
+}
+
+// ===== RENDER LAPS =====
+function renderLaps(bestSplit, worstSplit) {
+  emptyMsg.style.display = 'none';
+  lapList.innerHTML = '';
+  laps.forEach((lap, i) => {
+    const row = document.createElement('div');
+    row.className = 'lap-row';
+    const lapNum = laps.length - i; // display number (newest = highest)
+    if (lap.split === bestSplit && laps.length > 1) row.classList.add('best');
+    else if (lap.split === worstSplit && laps.length > 1) row.classList.add('worst');
+    // Only animate the newest (first in array = index 0)
+    if (i > 0) row.style.animation = 'none';
+
+    row.innerHTML = `
+      <div class="lap-num">LAP ${String(lapNum).padStart(2,'0')}</div>
+      <div class="lap-split">${formatTime(lap.split)}</div>
+      <div class="lap-total">${formatTime(lap.total)}</div>
+    `;
+    lapList.appendChild(row);
+  });
+}
+
+function updateStats(bestSplit, worstSplit) {
+  const count = laps.length;
+  const avg = laps.reduce((a,l)=>a+l.split,0) / count;
+  statBest.textContent = formatTime(bestSplit);
+  statWorst.textContent = count > 1 ? formatTime(worstSplit) : '—';
+  statAvg.textContent = formatTime(avg);
+  statTotal.textContent = count;
+  lapBadge.textContent = `${count} LAP${count !== 1 ? 'S' : ''}`;
+  avgDisplay.textContent = formatTime(avg);
+}
+
+function flashGold() {
+  timerDisplay.classList.add('gold-flash');
+  setTimeout(() => timerDisplay.classList.remove('gold-flash'), 650);
+}
+
+// ===== EXPORT =====
+function exportLaps() {
+  if (laps.length === 0) { toast('No laps to export', 'orange'); return; }
+  const sortedByTime = [...laps].sort((a,b) => a.split - b.split);
+  const bestSplit = sortedByTime[0].split;
+  const worstSplit = sortedByTime[sortedByTime.length-1].split;
+
+  let txt = '=== APEX TIMER — LAP EXPORT ===\n';
+  txt += `Date: ${new Date().toLocaleString()}\n`;
+  txt += `Total Laps: ${laps.length}\n`;
+  txt += `Best Lap: ${formatTime(bestSplit)}\n`;
+  txt += `Worst Lap: ${formatTime(worstSplit)}\n`;
+  txt += `Average Lap: ${formatTime(laps.reduce((a,l)=>a+l.split,0)/laps.length)}\n`;
+  txt += '\n--- LAP BREAKDOWN ---\n';
+  [...laps].reverse().forEach((lap, i) => {
+    const n = i + 1;
+    const marker = lap.split === bestSplit && laps.length > 1 ? ' ⚡ BEST' : lap.split === worstSplit && laps.length > 1 ? ' 💀 WORST' : '';
+    txt += `LAP ${String(n).padStart(2,'0')}  SPLIT: ${formatTime(lap.split).padEnd(12)} TOTAL: ${formatTime(lap.total)}${marker}\n`;
+  });
+
+  const blob = new Blob([txt], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `apex-laps-${Date.now()}.txt`;
+  a.click();
+  toast('Laps exported ⬇', 'green');
+}
+
+// ===== SESSION PERSISTENCE =====
+function saveSession() {
+  const data = { elapsed, laps, running: false };
+  localStorage.setItem('apexSession', JSON.stringify(data));
+}
+
+function restoreSession() {
+  try {
+    const raw = localStorage.getItem('apexSession');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || data.elapsed === 0) return;
+
+    elapsed = data.elapsed || 0;
+    laps = data.laps || [];
+
+    updateDisplay(elapsed);
+    timerDisplay.classList.add('paused');
+
+    if (laps.length > 0) {
+      const sortedByTime = [...laps].sort((a,b)=>a.split-b.split);
+      const bestSplit = sortedByTime[0].split;
+      const worstSplit = sortedByTime[sortedByTime.length-1].split;
+      renderLaps(bestSplit, worstSplit);
+      updateStats(bestSplit, worstSplit);
+      // Remove animations for restored rows
+      lapList.querySelectorAll('.lap-row').forEach(r => r.style.animation = 'none');
+    }
+
+    btnReset.classList.add('active');
+    runLabel.textContent = 'PAUSED';
+    toast('Session restored', 'orange');
+  } catch(e) { localStorage.removeItem('apexSession'); }
+}
+
+// ===== TOAST =====
+function toast(msg, type = '') {
+  const tc = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  tc.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('fade-out');
+    setTimeout(() => el.remove(), 300);
+  }, 2200);
+}
+
+// ===== RIPPLE =====
+function addRipple(btn, e) {
+  const r = document.createElement('div');
+  r.className = 'btn-ripple';
+  const rect = btn.getBoundingClientRect();
+  const x = (e.clientX || rect.left + rect.width/2) - rect.left - 5;
+  const y = (e.clientY || rect.top + rect.height/2) - rect.top - 5;
+  r.style.left = x + 'px';
+  r.style.top = y + 'px';
+  btn.appendChild(r);
+  setTimeout(() => r.remove(), 500);
+}
+
+// ===== BUTTON EVENTS =====
+btnStart.addEventListener('click', e => {
+  addRipple(btnStart, e);
+  if (running) doPause(); else doStart();
+});
+btnLap.addEventListener('click', e => {
+  if (!running) return;
+  addRipple(btnLap, e);
+  doLap();
+});
+btnReset.addEventListener('click', e => {
+  if (running) return;
+  addRipple(btnReset, e);
+  doReset();
+});
+soundBtn.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  soundBtn.textContent = soundEnabled ? '🔊' : '🔇';
+  soundBtn.classList.toggle('active', soundEnabled);
+});
+
+// ===== KEYBOARD =====
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') { e.preventDefault(); if (running) doPause(); else doStart(); }
+  else if (e.key === 'l' || e.key === 'L') { if (running) doLap(); }
+  else if (e.key === 'r' || e.key === 'R') { if (!running && elapsed > 0) doReset(); }
+  else if (e.key === 'e' || e.key === 'E') { exportLaps(); }
+});
+
+// ===== INIT =====
+updateDisplay(0);
+restoreSession();
+</script>
+</body>
+</html>
